@@ -1,23 +1,31 @@
 package main
 
 import (
-	"flag"
+	"bytes"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"os"
 	"strings"
 
+	flag "github.com/spf13/pflag"
 	"github.com/wzshiming/translate"
 )
 
 var (
-	from = flag.String("from", "auto", "from lang")
-	to   = flag.String("to", "", "to lang")
+	from  = "auto"
+	to    string
+	out   string
+	files []string
 )
 
 func init() {
+	flag.StringVar(&from, "from", from, "from lang")
+	flag.StringVarP(&to, "to", "t", to, "to lang")
+	flag.StringVarP(&out, "out", "o", out, "out")
+	flag.StringSliceVarP(&files, "file", "f", files, "file")
 	flag.Usage = func() {
-		w := flag.CommandLine.Output()
+		w := os.Stderr
 		fmt.Fprintf(w, "Translate:\n")
 		for i := 0; ; i++ {
 			v, ok := translate.GoogleCodeMap[translate.GoogleCode(i)]
@@ -36,26 +44,55 @@ func init() {
 }
 
 func main() {
-	a := flag.Args()
-	if *to == "" {
+	if to == "" {
 		flag.Usage()
 		return
 	}
-	text := ""
-	if len(a) == 0 {
-		buf, _ := ioutil.ReadAll(os.Stdin)
-		text = string(buf)
-	} else {
-		text = strings.Join(a, " ")
+
+	text := []byte{}
+	args := flag.Args()
+	if len(args) != 0 {
+		text = []byte(strings.Join(args, " "))
+		text = append(text, '\n')
 	}
-	if text == "" {
-		flag.Usage()
+	for _, file := range files {
+		body, err := openFile(file)
+		if err != nil {
+			log.Println(err)
+			continue
+		}
+		text = append(text, body...)
+		text = append(text, '\n')
+	}
+	text = bytes.TrimSpace(text)
+	if len(text) == 0 {
 		return
 	}
-	ret, err := translate.GoogleTranslate(text, *from, *to)
+
+	ret, err := translate.GoogleTranslate(string(text), from, to)
 	if err != nil {
-		fmt.Println(err)
+		log.Println(err)
 		return
 	}
-	fmt.Println(ret)
+	if out == "" {
+		fmt.Println(ret)
+	} else {
+		err = ioutil.WriteFile(out, []byte(ret), 0644)
+		if err != nil {
+			log.Println(err)
+			return
+		}
+	}
+}
+
+func openFile(file string) ([]byte, error) {
+	if file == "-" {
+		return ioutil.ReadAll(os.Stdin)
+	}
+	f, err := os.Open(file)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	return ioutil.ReadAll(f)
 }
