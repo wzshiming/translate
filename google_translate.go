@@ -2,6 +2,8 @@ package translate
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -13,7 +15,8 @@ var (
 
 	cli = requests.NewClient().
 		SetLogLevel(requests.LogError).
-		SetSkipVerify(true)
+		SetSkipVerify(true).
+		SetCache(requests.FileCacheDir(getCacheDir()))
 
 	gt = cli.NewRequest().
 		SetTimeout(time.Second*2).
@@ -75,4 +78,13 @@ func (m *messages) UnmarshalJSON(body []byte) error {
 		*m = append(*m, string(by))
 	}
 	return nil
+}
+
+func getCacheDir() string {
+	cacheDir := ".translate"
+	home, _ := os.UserHomeDir()
+	if home != "" {
+		cacheDir = filepath.Join(home, cacheDir)
+	}
+	return cacheDir
 }
